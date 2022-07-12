@@ -25,37 +25,57 @@ async function createPdf(existingPdfBytes, options) {
   console.log(origPages);
   var pageNum = 0;
 
-  // iterate through, plucking out 4 pages at a time and inserting into new sheet
-  for (var sheet = 0; sheet < pageCount / 4; sheet++) {
+  // This is an explanation of the saddle-stitch booklet binding process:
+  // 1. The document takes pageCount, which is a multiple of 4.
+  // 2. It divides the booklet into smaller booklets (for now, 32 pages).
+  // 3. It adds all booklets to the bookletDoc. Users can print and stitch separately.
+  // This is a test and it might be useful as a separate option available for bookletize.js.
+  
+  function bindPages(bookletDoc, pageEnd){ 
+  
+    // iterate through, plucking out 4 pages at a time and inserting into new sheet
+    for (var sheet = 0; sheet < pageEnd / 4; sheet++) {
 
-    // double width, same height:
-    const bookletPage = bookletDoc.addPage([width * 2, height]);
+      // double width, same height:
+      const bookletPage = bookletDoc.addPage([width * 2, height]);
 
-    // this function can be configured in options, and is what fetches the "next" page from the original stack (and removes it)
-    let getPage = options.getPage || async function getPage(originalPosition, placement, originalPages, _bookletDoc, _bookletPage) {
-      if (originalPages.length > 0) {
-        var embeddedPage = await _bookletDoc.embedPage(originalPages.splice(originalPosition,1)[0]);
-        _bookletPage.drawPage(embeddedPage, placement);
+      // this function can be configured in options, and is what fetches the "next" page from the original stack (and removes it)
+      let getPage = options.getPage || async function getPage(originalPosition, placement, originalPages, _bookletDoc, _bookletPage) {
+        if (originalPages.length > 0) {
+          var embeddedPage = await _bookletDoc.embedPage(originalPages.splice(originalPosition,1)[0]);
+          _bookletPage.drawPage(embeddedPage, placement);
+        }
       }
-    }
 
-    await getPage(origPages.length-1,{x: 0, y: 0}, origPages, bookletDoc, bookletPage)
-    pageNum += 1;
+      await getPage(origPages.length-1,{x: 0, y: 0}, origPages, bookletDoc, bookletPage)
+      pageNum += 1;
 
-    await getPage(0,{x: width, y: 0}, origPages, bookletDoc, bookletPage)
-    pageNum += 1;
+      await getPage(0,{x: width, y: 0}, origPages, bookletDoc, bookletPage)
+      pageNum += 1;
 
-    const bookletPage2 = bookletDoc.addPage([width * 2, height]);
+      const bookletPage2 = bookletDoc.addPage([width * 2, height]);
 
-    await getPage(0,{x: 0, y: 0}, origPages, bookletDoc, bookletPage2)
-    pageNum += 1;
+      await getPage(0,{x: 0, y: 0}, origPages, bookletDoc, bookletPage2)
+      pageNum += 1;
 
-    await getPage(origPages.length-1,{x: width, y: 0}, origPages, bookletDoc, bookletPage2)
-    pageNum += 1;
+      await getPage(origPages.length-1,{x: width, y: 0}, origPages, bookletDoc, bookletPage2)
+      pageNum += 1;
 
-    console.log('added sheet', sheet);
+      console.log('added sheet', sheet);
+    }    
   }
-
+  
+  let totalBooklets = ceil(pageCount / 32);
+  var remainder = pageCount % 32;
+  
+  for (var subBooklet = 0; subBooklet < totalBooklets; subBooklet++) {
+    if (remainder != 0){
+      bindPages(bookletDoc, 32);
+    }else{
+      bindPages(bookletDoc, remainder);
+    }
+  }
+  
   console.log('completed assembling sheets');
   $('.fa-spin').addClass('hidden');
 //  const pdfDataUri = await bookletDoc.saveAsBase64({ dataUri: true });
